@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>3D户型图|清河智家V</title>
+    <!-- ===== 外部库 CDN ===== -->
+<!--    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
+	 -->
+    <script src="threejs/three.min.js"></script>
+    <script src="threejs/OrbitControls.js"></script>
+    <script src="threejs/GLTFLoader.js"></script>
+    <script src="threejs/RGBELoader.js"></script>
+    <script src="threejs/TransformControls.js"></script>
+	
+</head>
+<link rel="stylesheet" href="css/style.css">
+<body>
+    <!-- ===== 顶部导航 ===== -->
+    <header>
+        <h1>🏠清河智家V <span>移动版</span></h1>
+        <div class="header-actions">
+            <button class="primary" onclick="app.saveSystem.saveToDB()" title="保存当前所有设计到数据库">💾 保存</button>
+            <button class="danger" onclick="app.saveSystem.clearDB()" title="清空已保存的进度">🗑️ 清除</button>
+        </div>
+    </header>
+    <!-- ===== 主容器 ===== -->
+    <div class="app-container">
+        <!-- ===== 侧边栏遮罩 (移动端) ===== -->
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="app.closeMobileSidebars()"></div>
+        <!-- ===== 左侧面板 ===== -->
+        <div class="sidebar sidebar-left" id="sidebarLeft">
+            <div style="display:none; text-align:right; margin-bottom:6px;" class="mobile-close-btn">
+                <button onclick="app.closeMobileSidebars()" style="background:transparent; font-size:1.2rem;">✕</button>
+            </div>
+            <!-- 绘制面板 -->
+            <div class="panel-group">
+                <div class="group-title">1. 户型绘制 <span class="badge" id="modeStatus">编辑模式</span></div>
+                <div class="drawing-area"><canvas id="drawCanvas"></canvas></div>
+                <div class="btn-row">
+                    <button onclick="app.startDrawing()" id="btnStart" class="primary">✒️ 多边形</button>
+                    <button onclick="app.startRectDrawing()" id="btnRect" class="primary" style="background:var(--warning);color:#000;">⬜ 矩形</button>
+                </div>
+                <div class="btn-row">
+                    <button onclick="app.closeCurrentShape()" id="btnClose" disabled>✔️ 闭合</button>
+                    <button onclick="app.clearCurrentFloor()" class="danger">🗑️ 清空本层</button>
+                </div>
+                <div class="floor-controls">
+                    <div class="group-title" style="font-size:0.8rem;">楼层管理</div>
+                    <div class="control-item">
+                        <label>当前楼层</label>
+                        <select id="currentFloor" onchange="app.switchFloor(this.value)">
+                            <option value="0">1层</option>
+                        </select>
+                    </div>
+                    <div class="btn-row">
+                        <button onclick="app.addFloor()" class="success" style="flex:2">+ 添加楼层</button>
+                        <button onclick="app.removeFloor()" class="danger" style="flex:1">- 删除</button>
+                    </div>
+                    <div id="floorInfo" style="font-size:0.7rem;color:#aaa;text-align:center;margin-top:4px;">总楼层: 1 | 层高: 2.8m</div>
+                </div>
+                <div class="btn-row"><button onclick="app.generate3D()" class="active" style="width:100%">🔄 刷新3D建筑</button></div>
+            </div>
+            <!-- 环境 -->
+            <div class="panel-group">
+                <div class="group-title">2. 全局环境</div>
+                <div class="control-item"><label>☀️ 阳光</label><input type="range" id="sunIntensity" min="0" max="200" value="100" oninput="app.updateLights()"></div>
+                <div class="control-item"><label>☁️ 环境光</label><input type="range" id="ambientIntensity" min="0" max="100" value="60" oninput="app.updateLights()"></div>
+            </div>
+            <!-- 材质 -->
+            <div class="panel-group">
+                <div class="group-title">3. 材质装修</div>
+                <div class="control-item"><label>层高</label><input type="number" id="wallHeight" value="2.8" step="0.1" onchange="app.updateFloorInfo();app.generate3D()"></div>
+                <div class="control-item"><label>墙体透明</label><input type="range" id="wallOpacity" min="0.1" max="1.0" step="0.05" value="1.0" oninput="app.updateMaterials()"></div>
+                <div class="control-item"><label>墙漆</label><input type="color" id="wallColor" value="#e0e0e0" oninput="app.updateMaterials()"></div>
+                <div class="control-item"><label>地板</label><input type="color" id="floorColor" value="#505050" oninput="app.updateMaterials()"></div>
+                <div class="texture-upload" onclick="document.getElementById('texInput').click()">📂 上传当前层地板纹理 <input type="file" id="texInput" hidden accept="image/*" onchange="app.handleFloorTexture(this)"></div>
+                <div class="control-item"><label>贴图缩放</label><input type="range" id="texScale" min="0.1" max="5" step="0.1" value="1" oninput="app.updateFloorTextureScale()"></div>
+            </div>
+            <!-- HA -->
+            <div class="panel-group" id="haPanel">
+                <div class="group-title">5. 智能家居 (HA)</div>
+                <div class="control-item">
+                    <label>HA地址</label>
+                    <input type="text" id="haUrl" placeholder="http://192.168.x.x:8123">
+                </div>
+                <div class="control-item">
+                    <label>Token</label>
+                    <input type="password" id="haToken" placeholder="eyJhbG...">
+                </div>
+                <div class="btn-row">
+                    <button class="primary" onclick="app.ha.testConnection()">📡 测试连接</button>
+                </div>
+                <div id="haStatus" style="font-size:0.7rem;text-align:center;color:#888;margin-top:4px;">未连接</div>
+            </div>
+            <button class="success" style="width:100%;padding:12px;font-size:0.9rem;margin-top:auto;" onclick="app.togglePlayMode(true)">🎉 进入演示模式</button>
+        </div>
+        <!-- ===== 3D 视口 ===== -->
+        <div class="viewport" id="viewport">
+            <div id="three-canvas"></div>
+            <div id="labelContainer"></div>
+            <!-- 传感器卡片容器 (3D场景叠加) -->
+            <div id="sensorCardContainer"></div>
+            <!-- 变换工具栏 -->
+            <div class="viewport-controls" id="transformToolbar" style="display:none;">
+                <button onclick="app.setTransformMode('translate')">移动</button>
+                <button onclick="app.setTransformMode('rotate')">旋转</button>
+                <button onclick="app.setTransformMode('scale')">缩放</button>
+            </div>
+            <!-- 播放模式UI -->
+            <div id="playUI" style="display:none;">
+                <button id="toggleSideBtn" onclick="app.toggleSidePanel()">☰</button>
+                <div id="glassSidePanel">
+                    <h2 style="color:var(--accent);margin-bottom:16px;font-size:1.1rem;">系统菜单</h2>
+                    <div style="color:var(--success);margin-bottom:10px;font-size:0.8rem;">🟢 HA 已联机</div>
+                    <div style="border:2px dashed rgba(255,255,255,0.15);border-radius:8px;height:80px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);font-size:0.8rem;">场景联动中...</div>
+                </div>
+                <div class="floor-nav-container" id="floorNav">
+                    <div class="floor-nav-title">🏢 楼层</div>
+                    <div class="floor-btn-row" id="floorButtons"></div>
+                </div>
+                <button class="exit-play-btn" onclick="app.togglePlayMode(false)">🚪 退出</button>
+                <!-- 设备控制面板 (可拖拽) -->
+                <div id="iotPanel" class="iot-panel">
+                    <div class="iot-header" id="iotHeader">
+                        <span id="iotTitle" class="iot-title">设备</span>
+                        <span class="iot-close" onclick="app.closeIoTPanel()">×</span>
+                    </div>
+                    <div id="iotContent" class="iot-content"></div>
+                </div>
+                <!-- ★ 新增: 左下角背景风格化按钮 (演示模式, 复用sensor-mgr-btn样式+inline定位) -->
+                <button class="sensor-mgr-btn theme-mgr-btn" style="bottom:78px;" onclick="app.openThemeEditor()">🎨 背景风格</button>
+                <!-- ★ 新增: 背景风格化 + 天空球HDR 编辑弹窗 (全部内联样式, CSS零改动) -->
+                <div id="themeModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:600;display:none;justify-content:center;align-items:center;padding:16px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">
+                    <div style="background:#1e1e28;border:1px solid var(--border);border-radius:14px;padding:18px;max-width:500px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.7);">
+                        <h3 style="color:var(--accent);margin-bottom:10px;font-size:1rem;border-bottom:1px solid #333;padding-bottom:8px;">🎨 三维场景背景风格化</h3>
+                        <div style="font-size:0.65rem;color:#888;margin-bottom:8px;line-height:1.5;">点击风格卡片即确认应用 → 背景颜色缓动过渡 + 自动协调墙体颜色 / 半球光 / 平行光 / 天空球渐变</div>
+                        <div id="themeGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;"></div>
+                        <div style="border-top:1px dashed #444;padding-top:10px;">
+                            <div style="font-size:0.8rem;color:var(--accent);margin-bottom:4px;font-weight:600;">🌌 天空球 HDR 贴图</div>
+                            <div style="font-size:0.62rem;color:#888;margin-bottom:6px;line-height:1.5;">自动扫描 img 目录: <b>.hdr</b> 文件 (Equirectangular HDR) 经 PMREM 生成环境光照, 对模型真实渲染; 含 sky/天空 命名图片可作天空背景; 亦可用 img/sky.json 清单指定任意贴图: {"skies":[{"name":"黄昏","file":"sunset.hdr"}]}</div>
+                            <div id="skyListGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;"></div>
+                            <div style="display:flex;gap:6px;">
+                                <button onclick="app.skyLibrary.rescan()" style="flex:1;">🔄 重扫img目录</button>
+                                <button onclick="app.clearSkyTexture()" style="flex:1;">🚫 清除HDR贴图</button>
+                            </div>
+                            <div id="skyStatus" style="font-size:0.62rem;color:#888;margin-top:6px;text-align:center;line-height:1.5;">🔍 正在扫描 img 目录...</div>
+                        </div>
+                        <div class="btn-row" style="margin-top:12px;">
+                            <button onclick="app.closeThemeEditor()" style="flex:1;">关闭</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- ===== 右侧面板 ===== -->
+        <div class="sidebar sidebar-right" id="sidebarRight">
+            <div style="display:none; text-align:right; margin-bottom:6px;" class="mobile-close-btn">
+                <button onclick="app.closeMobileSidebars()" style="background:transparent; font-size:1.2rem;">✕</button>
+            </div>
+            <div class="panel-group" id="propPanel" style="display:none;border-color:var(--accent);">
+                <div class="group-title">🔧 属性编辑</div>
+                <div class="control-item" style="background:#333;padding:4px;border-radius:4px;">
+                    <label style="color:var(--accent);font-weight:bold;">🏷️ 名称</label>
+                    <input type="text" id="objName" onchange="app.updateObjName()">
+                </div>
+                <div class="control-item" style="background:#222;padding:4px;border-radius:4px;margin-top:4px;">
+                    <label style="color:#aaa;">🔗 Entity ID</label>
+                    <input type="text" id="objEntityId" placeholder="light.xx / switch.xx" onchange="app.updateObjEntityId()">
+                </div>
+                <div class="btn-row" style="margin-top:6px;">
+                    <button id="lockBtn" onclick="app.toggleLock()">🔓 锁定</button>
+                    <button class="danger" onclick="app.deleteSelected()">删除</button>
+                </div>
+                <div class="control-item"><label>X</label><input type="number" id="posX" step="0.1" onchange="app.uiToModel()"></div>
+                <div class="control-item"><label>Y</label><input type="number" id="posY" step="0.1" onchange="app.uiToModel()"></div>
+                <div class="control-item"><label>Z</label><input type="number" id="posZ" step="0.1" onchange="app.uiToModel()"></div>
+                <div class="control-item"><label>旋转°</label><input type="number" id="rotY" step="15" onchange="app.uiToModel()"></div>
+                <div class="control-item"><label>缩放</label><input type="range" id="scaleS" min="0.1" max="3" step="0.1" value="1" oninput="app.uiToModel()"></div>
+                <div id="animControls" class="anim-controls">
+                    <div class="group-title">✨ 动画引擎</div>
+                    <label class="feature-check"><input type="checkbox" id="animEnabled" onchange="app.updateAnimSettings()"> 启用动画</label>
+                    <div class="control-item">
+                        <label>特效</label>
+                        <select id="animType" onchange="app.onAnimTypeChange()"></select>
+                    </div>
+                    <div id="dynamicParamsContainer"></div>
+                    <div style="margin-top:10px;border-top:1px dashed #444;padding-top:8px;">
+                        <div style="font-size:0.65rem;color:#888;margin-bottom:4px;">扩展库:</div>
+                        <div class="texture-upload" onclick="document.getElementById('pluginLoader').click()">🧩 导入动画插件 (.js)<input type="file" id="pluginLoader" hidden accept=".js" onchange="app.loadPlugin(this)"></div>
+                    </div>
+                </div>
+                <div id="materialControls" class="material-controls">
+                    <div class="group-title">🎨 材质 (PBR)</div>
+                    <div class="control-item"><label>颜色</label><input type="color" id="matColor" onchange="app.updateMaterial()"></div>
+                    <div class="control-item"><label>粗糙度</label><input type="range" id="matRoughness" min="0" max="1" step="0.01" value="0.5" oninput="app.updateMaterial()"></div>
+                    <div class="control-item"><label>金属度</label><input type="range" id="matMetalness" min="0" max="1" step="0.01" value="0.2" oninput="app.updateMaterial()"></div>
+                    <div class="control-item"><label>透明度</label><input type="range" id="matOpacity" min="0" max="1" step="0.01" value="1.0" oninput="app.updateMaterial()"></div>
+                    <div class="texture-upload" onclick="document.getElementById('matTextureInput').click()">📁 上传纹理贴图<input type="file" id="matTextureInput" hidden accept="image/*" onchange="app.handleMaterialTexture(this)"></div>
+                    <div class="btn-row">
+                        <button onclick="app.resetMaterial()">🔄 重置</button>
+                        <button onclick="app.applyToAllSimilar()">📋 同类应用</button>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-group">
+                <div class="group-title">4. 添加模型库</div>
+                <div class="preset-grid" style="margin-bottom:6px;">
+                    <div class="preset-card" onclick="app.initAddPreset('wooden_door')"><span class="preset-icon">🚪</span><span class="preset-name">实木门</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('glass_door')"><span class="preset-icon">🪟</span><span class="preset-name">玻璃移门</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('security_door')"><span class="preset-icon">🔒</span><span class="preset-name">防盗门</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('window')"><span class="preset-icon">🖼️</span><span class="preset-name">窗户</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('curtain')"><span class="preset-icon">🧶</span><span class="preset-name">窗帘</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('photo_frame')"><span class="preset-icon">🎑</span><span class="preset-name">相框</span></div>
+                </div>
+                <hr style="border:0;border-top:1px solid #333;margin:6px 0;">
+                <div class="preset-grid">
+                    <div class="preset-card" onclick="app.initAddPreset('ceiling_light')"><span class="preset-icon">🔆</span><span class="preset-name">吸顶灯</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('spot_light')"><span class="preset-icon">🔦</span><span class="preset-name">射灯</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('led_strip')"><span class="preset-icon">💈</span><span class="preset-name">灯带</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('ac_stand')"><span class="preset-icon">❄️</span><span class="preset-name">立式空调</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('tv')"><span class="preset-icon">📺</span><span class="preset-name">电视</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('wall_tv')"><span class="preset-icon">🖥️</span><span class="preset-name">壁挂电视</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('bed')"><span class="preset-icon">🛏️</span><span class="preset-name">双人床</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('sofa')"><span class="preset-icon">🛋️</span><span class="preset-name">沙发</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('table')"><span class="preset-icon">🪑</span><span class="preset-name">餐桌</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('desk')"><span class="preset-icon">📠</span><span class="preset-name">书桌</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('chair')"><span class="preset-icon">💺</span><span class="preset-name">椅子</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('wardrobe')"><span class="preset-icon">🚪</span><span class="preset-name">衣柜</span></div>
+                    <div class="preset-card" onclick="app.initAddPreset('ai_speaker')"><span class="preset-icon">🔈</span><span class="preset-name">智能音箱</span></div>
+                </div>
+                <div class="texture-upload" style="margin-top:8px;" onclick="document.getElementById('glbInput').click()">⬇️ 导入 GLB 模型 <input type="file" id="glbInput" hidden accept=".glb,.gltf" onchange="app.handleGLB(this)"></div>
+            </div>
+        </div>
+    </div>
+    <!-- ===== 配置弹窗 ===== -->
+    <div id="configModal">
+        <div class="modal-card">
+            <h3>🛠️ 定义设备功能</h3>
+            <div class="control-item"><label>设备名称</label><input type="text" id="cfgName" placeholder="例如: 卧室木门"></div>
+            <div class="control-item">
+                <label>设备类型</label>
+                <select id="cfgType" onchange="app.onConfigTypeChange()">
+                    <option value="furniture">普通家具/装饰</option>
+                    <option value="door_window">门窗 (墙体挖洞)</option>
+                    <option value="light">智能灯具</option>
+                    <option value="ac">空调设备</option>
+                    <option value="tv">电视/多媒体</option>
+                </select>
+            </div>
+            <div id="cfgFeaturesLight" style="display:none;margin-top:8px;border:1px dashed #444;padding:8px;">
+                <div style="color:#aaa;font-size:0.75rem;margin-bottom:4px;">支持的功能:</div>
+                <label class="feature-check"><input type="checkbox" id="featPower" checked disabled> 开关控制</label>
+                <label class="feature-check"><input type="checkbox" id="featDimmer"> 亮度调节</label>
+                <label class="feature-check"><input type="checkbox" id="featColor"> 颜色调节</label>
+            </div>
+            <div id="cfgFeaturesAC" style="display:none;margin-top:8px;border:1px dashed #444;padding:8px;">
+                <div style="font-size:0.75rem;color:var(--success);">✅ 温度 | 模式 | 风速</div>
+            </div>
+            <div id="cfgFeaturesDoor" style="display:none;margin-top:8px;border:1px dashed #444;padding:8px;">
+                <div style="font-size:0.75rem;color:var(--warning);">ℹ️ 放置在墙体上自动开洞</div>
+                <label class="feature-check"><input type="checkbox" id="featPBR" checked> 启用PBR材质</label>
+            </div>
+            <div class="btn-row" style="margin-top:16px;">
+                <button onclick="document.getElementById('configModal').style.display='none'">取消</button>
+                <button class="primary" onclick="app.confirmAddObject()">确认添加</button>
+            </div>
+        </div>
+    </div>
+    <!-- ===== 传感器管理弹窗 (类型: 覆盖HA官方全部sensor device_class) ===== -->
+    <div id="sensorModal">
+        <div class="modal-card" style="max-width:480px;">
+            <h3>📡 楼层传感器管理</h3>
+            <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="color:#aaa;font-size:0.8rem;">选择楼层:</label>
+                <select id="sensorFloorSelect" onchange="app.renderSensorEditor()" style="flex:1;background:#1a1a1f;border:1px solid #444;color:#fff;padding:4px 8px;border-radius:4px;"></select>
+            </div>
+            <div id="sensorListContainer" style="max-height:300px;overflow-y:auto;margin-bottom:12px;border:1px solid #333;border-radius:6px;padding:8px;"></div>
+            <div style="border-top:1px dashed #444;padding-top:10px;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                    <input type="text" id="sensorEntityId" placeholder="sensor.temp_living" style="flex:2;min-width:120px;background:#1a1a1f;border:1px solid #444;color:#fff;padding:4px 8px;border-radius:4px;">
+                    <input type="text" id="sensorName" placeholder="名称 (如: 温度)" style="flex:1;min-width:80px;background:#1a1a1f;border:1px solid #444;color:#fff;padding:4px 8px;border-radius:4px;">
+                    <select id="sensorType" style="flex:1;min-width:120px;background:#1a1a1f;border:1px solid #444;color:#fff;padding:4px 8px;border-radius:4px;">
+                        <optgroup label="🌡️ 环境温湿光声">
+                            <option value="temperature">🌡️ 温度</option>
+                            <option value="temperature_delta">🌡️ 温差</option>
+                            <option value="dewpoint">💧 露点</option>
+                            <option value="humidity">💧 湿度</option>
+                            <option value="absolute_humidity">💧 绝对湿度</option>
+                            <option value="moisture">🫗 水分/土壤湿度</option>
+                            <option value="pressure">📊 气压</option>
+                            <option value="atmospheric_pressure">🌍 大气压</option>
+                            <option value="illuminance">☀️ 照度</option>
+                            <option value="irradiance">☀️ 辐照度</option>
+                            <option value="sound_pressure">🔊 声压/噪音</option>
+                        </optgroup>
+                        <optgroup label="🌬️ 空气质量">
+                            <option value="aqi">🌬️ 空气质量指数</option>
+                            <option value="co2">🫧 CO₂ 二氧化碳</option>
+                            <option value="carbon_monoxide">🚬 CO 一氧化碳</option>
+                            <option value="pm25">🧪 PM2.5</option>
+                            <option value="pm10">🧪 PM10</option>
+                            <option value="pm1">🧪 PM1.0</option>
+                            <option value="pm4">🧪 PM4.0</option>
+                            <option value="voc">🧴 VOC 挥发物</option>
+                            <option value="volatile_organic_compounds_parts">🧴 VOC 比率</option>
+                            <option value="formaldehyde">🧴 甲醛</option>
+                            <option value="nitrogen_dioxide">🧪 NO₂ 二氧化氮</option>
+                            <option value="nitrogen_monoxide">🧪 NO 一氧化氮</option>
+                            <option value="nitrous_oxide">🧪 N₂O 氧化亚氮</option>
+                            <option value="ozone">🧪 O₃ 臭氧</option>
+                            <option value="sulphur_dioxide">🧪 SO₂ 二氧化硫</option>
+                            <option value="radon">☢️ 氡</option>
+                            <option value="gas">🔥 燃气/气体量</option>
+                        </optgroup>
+                        <optgroup label="⚡ 电气能源">
+                            <option value="voltage">⚡ 电压</option>
+                            <option value="current">⚡ 电流</option>
+                            <option value="power">⚡ 功率</option>
+                            <option value="apparent_power">⚡ 视在功率</option>
+                            <option value="reactive_power">⚡ 无功功率</option>
+                            <option value="power_factor">⚡ 功率因数</option>
+                            <option value="energy">🔋 能量/电表</option>
+                            <option value="reactive_energy">🔋 无功能量</option>
+                            <option value="energy_storage">🔋 储能</option>
+                            <option value="battery">🔋 电池电量</option>
+                            <option value="frequency">⚡ 频率</option>
+                        </optgroup>
+                        <optgroup label="📏 物理量">
+                            <option value="water">💧 水量/水表</option>
+                            <option value="volume">📦 体积</option>
+                            <option value="volume_flow_rate">🌊 流量</option>
+                            <option value="volume_storage">📦 储存容量</option>
+                            <option value="distance">📏 距离</option>
+                            <option value="area">📐 面积</option>
+                            <option value="speed">🏃 速度</option>
+                            <option value="weight">⚖️ 重量</option>
+                            <option value="conductivity">🧂 电导率</option>
+                            <option value="ph">🧪 pH 酸碱度</option>
+                        </optgroup>
+                        <optgroup label="📊 信息其他">
+                            <option value="signal_strength">📶 信号强度</option>
+                            <option value="uptime">⏱️ 运行时间</option>
+                            <option value="duration">⏱️ 时长</option>
+                            <option value="timestamp">🕒 时间戳</option>
+                            <option value="date">📅 日期</option>
+                            <option value="data_size">💾 数据量</option>
+                            <option value="data_rate">💾 数据速率</option>
+                            <option value="monetary">💰 货币</option>
+                            <option value="wind_speed">💨 风速</option>
+                            <option value="wind_direction">🧭 风向</option>
+                            <option value="precipitation">🌧️ 降水量</option>
+                            <option value="precipitation_intensity">🌧️ 降水强度</option>
+                            <option value="blood_glucose_concentration">🩸 血糖</option>
+                            <option value="enum">🔘 枚举状态</option>
+                            <option value="other">📟 其他</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <button class="primary" onclick="app.addSensorEntity()" style="width:100%;">➕ 添加传感器</button>
+            </div>
+            <div class="btn-row" style="margin-top:12px;">
+                <button onclick="document.getElementById('sensorModal').style.display='none'">关闭</button>
+            </div>
+        </div>
+    </div>
+    <!-- ===== Toast ===== -->
+    <div id="toast">保存成功！</div>
+    <!-- ===== 引用 JS ===== -->
+	<script src="js/first.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

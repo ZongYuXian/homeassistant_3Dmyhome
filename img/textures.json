@@ -1,0 +1,28 @@
+{
+    "textures": [
+      {"name": "木地板1", "file": "pic005.jpg"},
+      {"name": "木地板2", "file": "pic006.jpg"},
+      {"name": "瓷砖1", "file": "pic007.jpg"},
+      {"name": "瓷砖2", "file": "pic008.jpg"},
+      {"name": "瓷砖3", "file": "pic009.jpg"},
+      {"name": "瓷砖4", "file": "pic010.jpg"},
+      {"name": "瓷砖5", "file": "pic015.png"},
+      {"name": "瓷砖6", "file": "pic014.jpg"},
+      {"name": "瓷砖7", "file": "pic013.jpg"},
+      {"name": "瓷砖8", "file": "pic012.jpg"},
+      {"name": "瓷砖9", "file": "pic011.jpg"},
+      {"name": "瓷砖10", "file": "pic004.jpg"},
+      {"name": "瓷砖11", "file": "pic003.jpg"},
+      {"name": "木地板3", "file": "pic002.jpg"},
+      {"name": "木地板4", "file": "pic001.jpg"},
+      {"name": "瓷砖12", "file": "pic000.jpg"},
+      {"name": "瓷砖13", "file": "pic022.jpeg"},
+      {"name": "瓷砖14", "file": "pic021.jpeg"},
+      {"name": "瓷砖15", "file": "pic020.jpeg"},
+      {"name": "瓷砖16", "file": "pic019.jpeg"},
+      {"name": "瓷砖17", "file": "pic018.jpeg"},
+      {"name": "瓷砖18", "file": "pic017.jpeg"},
+      {"name": "瓷砖19", "file": "pic016.jpeg"}
+  
+    ]
+  }
